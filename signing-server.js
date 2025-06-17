@@ -12,7 +12,7 @@ app.use(bodyParser.json());
 
 // Configuration from .env with defaults
 const config = {
-    RPC_URL: process.env.RPC_URL || 'https://rpc.bdagscan.com/',
+    RPC_URL: process.env.RPC_URL || 'http://localhost:8545',
     GAS: parseInt(process.env.GAS_LIMIT) || 21000,
     GAS_PRICE: process.env.GAS_PRICE || '50', // in Gwei
     DEFAULT_AMOUNT_ETHER: process.env.DEFAULT_AMOUNT_ETHER || '0.0001'
@@ -34,7 +34,7 @@ app.post('/sign', async (req, res) => {
             throw new Error('Receiver address required');
         }
 
-        console.log("sender----->", req.body.sender);
+        console.log("sender----->", req.body.sender.address);
 
         const nonce = nonceTracker[sender.address] = 
             (nonceTracker[sender.address] ?? await web3.eth.getTransactionCount(sender.address, 'pending')) ;
@@ -52,7 +52,7 @@ app.post('/sign', async (req, res) => {
         };
 
         const signedTx = await web3.eth.accounts.signTransaction(tx, sender.privateKey);
-        console.log("signedTx----->", signedTx);
+        //console.log("signedTx----->", signedTx);
 
         // Send the raw transaction directly to the RPC endpoint
         const rpcResponse = await axios.post(config.RPC_URL, {
@@ -62,7 +62,7 @@ app.post('/sign', async (req, res) => {
             id: 1
         });
 
-        console.log("rpcResponse----->", rpcResponse.data);
+       // console.log("rpcResponse----->", rpcResponse.data);
 
         // Return the RPC response to the client
         res.json(rpcResponse.data);

@@ -49,6 +49,11 @@ export default function () {
         headers: { 'Content-Type': 'application/json' }
     });
 
+   
+    console.log(`VU: ${__VU}, Iteration: ${__ITER}, Sender: ${sender.address}, Receiver: ${receiver}, Status: ${signRes.status},Transaction Hash: ${JSON.parse(signRes.body).result}`  );
+
+
+
     check(signRes, {
         'tx accepted': (r) => r.status === 200,
         'no rpc error': (r) => !r.json('error')
