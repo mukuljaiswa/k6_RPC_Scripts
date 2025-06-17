@@ -3,6 +3,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const { Web3 } = require('web3');
 const { HttpProvider } = require('web3-providers-http');
+const axios = require('axios');
 
 const app = express();
 const port = 3000;
@@ -24,14 +25,8 @@ app.post('/sign', async (req, res) => {
     try {
         const { receiver, amountEther = config.DEFAULT_AMOUNT_ETHER, sender } = req.body;
 
-
         console.log("request body----->", req.body);
 
-
-
-    
-
-        
         if (!sender?.address || !sender?.privateKey) {
             throw new Error('Invalid sender wallet provided');
         }
@@ -39,12 +34,12 @@ app.post('/sign', async (req, res) => {
             throw new Error('Receiver address required');
         }
 
-
-
         console.log("sender----->", req.body.sender);
 
         const nonce = nonceTracker[sender.address] = 
-            (nonceTracker[sender.address] ?? await web3.eth.getTransactionCount(sender.address, 'pending')) + 1;
+            (nonceTracker[sender.address] ?? await web3.eth.getTransactionCount(sender.address, 'pending')) ;
+            nonceTracker[sender.address] = BigInt(nonceTracker[sender.address]) + BigInt(1);
+
 
         console.log("nonce----->", nonce);
 
@@ -57,12 +52,26 @@ app.post('/sign', async (req, res) => {
         };
 
         const signedTx = await web3.eth.accounts.signTransaction(tx, sender.privateKey);
-
         console.log("signedTx----->", signedTx);
 
-        res.json({ rawTransaction: signedTx.rawTransaction });
+        // Send the raw transaction directly to the RPC endpoint
+        const rpcResponse = await axios.post(config.RPC_URL, {
+            jsonrpc: '2.0',
+            method: 'eth_sendRawTransaction',
+            params: [signedTx.rawTransaction],
+            id: 1
+        });
+
+        console.log("rpcResponse----->", rpcResponse.data);
+
+        // Return the RPC response to the client
+        res.json(rpcResponse.data);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error("Error:", err);
+        res.status(500).json({ 
+            error: err.message,
+            ...(err.response?.data && { rpcError: err.response.data })
+        });
     }
 });
 

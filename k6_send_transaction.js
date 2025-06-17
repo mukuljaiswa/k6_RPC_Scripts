@@ -2,74 +2,72 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { SharedArray } from 'k6/data';
 
-// Config - ONLY from environment
+// Configuration
 const config = {
     signServer: __ENV.SIGN_SERVER || 'http://localhost:3000/sign',
-    rpcUrl: __ENV.RPC_URL || 'https://rpc.bdagscan.com/',
     senderPath: __ENV.SENDER_WALLETS_PATH || './wallets/test3.json',
     receiverPath: __ENV.RECEIVER_WALLETS_PATH || './wallets/test2.json'
 };
 
+// Load sender wallets
+const senders = new SharedArray('senders', function () {
+    const data = JSON.parse(open(config.senderPath));
+    return data.map(wallet => ({
+        ...wallet,
+        amountEther: '0.0001' // Set fixed amount to send
+    }));
+});
 
-console.log('senderPath:', config.senderPath);
-console.log('receiverPath:', config.receiverPath);
+// Load receiver addresses
+const receivers = new SharedArray('receivers', function () {
+    const data = JSON.parse(open(config.receiverPath));
+    return data.map(w => typeof w === 'string' ? w : w.address);
+});
 
-// Validate config
-if (!config.senderPath || !config.receiverPath) {
-    throw new Error('Missing wallet paths in environment variables');
+// Validate address count
+if (senders.length < 10 || receivers.length < 10) {
+    throw new Error(`Need at least 10 senders and 10 receivers. Got ${senders.length} senders and ${receivers.length} receivers.`);
 }
 
-// Data loading
-const senders = new SharedArray('senders', function() {
-    return JSON.parse(open(config.senderPath));
-});
+export default function () {
+    const senderIndex = (__VU + __ITER) % senders.length;
+    const receiverIndex = (__VU + __ITER) % receivers.length;
 
+    const sender = senders[senderIndex];
+    const receiver = receivers[receiverIndex];
 
-console.log('Sender example:',senders)
-
-const receivers = new SharedArray('receivers', function() {
-    const data = JSON.parse(open(config.receiverPath));
-    return data.map(w => w.address || w); // Handle both [{address}] and ["address"]
-});
-
-console.log('Receiver example:', receivers);
-
-
-
-// Test execution
-export default function() {
-    const sender = senders[Math.floor(Math.random() * senders.length)];
-    const receiver = receivers[Math.floor(Math.random() * receivers.length)];
-
-    // Signing request
-    const signRes = http.post(config.signServer, JSON.stringify({
+    const txData = {
         receiver,
-        amountEther: '0.0001',
+        amountEther: sender.amountEther,
         sender: {
             address: sender.address,
-            privateKey: sender.privateKey
+            privateKey: String(sender.privateKey)
         }
-    }, null, 2), {
+    };
+
+    const signRes = http.post(config.signServer, JSON.stringify(txData), {
         headers: { 'Content-Type': 'application/json' }
     });
 
-    if (!check(signRes, { 'signing succeeded': (r) => r.status === 200 })) {
-        console.error('Signing failed:', signRes.body);
-        return;
-    }
-
-    // Broadcast transaction
-    const rpcRes = http.post(config.rpcUrl, JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'eth_sendRawTransaction',
-        params: [signRes.json('rawTransaction')],
-        id: 1
-    }));
-
-    check(rpcRes, {
+    check(signRes, {
         'tx accepted': (r) => r.status === 200,
         'no rpc error': (r) => !r.json('error')
     });
 
     sleep(1);
 }
+
+// Load test configuration
+export let options = {
+    scenarios: {
+        ramping_users: {
+            executor: 'ramping-vus',
+            startVUs: 0,
+            stages: [
+                { duration: '5s', target: 5 },
+                { duration: '20s', target: 5 },
+                { duration: '10s', target: 0 },
+            ],
+        },
+    },
+};
