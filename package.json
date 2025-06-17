@@ -1,0 +1,22 @@
+{
+  "name": "k6_rpc_load_test",
+  "version": "1.0.0",
+  "description": "## Project Overview",
+  "main": "get_transactions_test.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^2.2.0",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "web3": "^4.16.0",
+    "web3-providers-http": "^4.2.0"
+  }
+}
