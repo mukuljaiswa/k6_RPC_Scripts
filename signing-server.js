@@ -11,11 +11,10 @@ const port = 3000;
 
 app.use(bodyParser.json());
 
-// Configuration from .env with defaults
 const config = {
     RPC_URL: process.env.RPC_URL || 'http://localhost:8545',
     GAS: parseInt(process.env.GAS_LIMIT) || 21000,
-    GAS_PRICE: process.env.GAS_PRICE || '50', // in Gwei
+    GAS_PRICE: process.env.GAS_PRICE || '50',
     DEFAULT_AMOUNT_ETHER: process.env.DEFAULT_AMOUNT_ETHER || '0.0001'
 };
 
@@ -33,23 +32,21 @@ app.post('/sign', async (req, res) => {
             throw new Error('Receiver address required');
         }
 
-        const nonce = nonceTracker[sender.address] = 
-            (nonceTracker[sender.address] ?? await web3.eth.getTransactionCount(sender.address, 'pending'));
-        nonceTracker[sender.address] = BigInt(nonceTracker[sender.address]) + BigInt(1);
+        // Get current nonce (either from tracker or blockchain)
+        const currentNonce = nonceTracker[sender.address] ?? await web3.eth.getTransactionCount(sender.address, 'pending');
 
-        console.log("nonce----->", nonce.toString());
-
+        console.log('Nonce tracker:', nonceTracker);
+        
         const tx = {
             to: receiver,
             value: web3.utils.toWei(amountEther, 'ether'),
             gas: config.GAS,
             gasPrice: web3.utils.toWei(config.GAS_PRICE, 'gwei'),
-            nonce
+            nonce: currentNonce
         };
 
         const signedTx = await web3.eth.accounts.signTransaction(tx, sender.privateKey);
 
-        // Send the raw transaction directly to the RPC endpoint
         const rpcResponse = await axios.post(config.RPC_URL, {
             jsonrpc: '2.0',
             method: 'eth_sendRawTransaction',
@@ -57,19 +54,21 @@ app.post('/sign', async (req, res) => {
             id: 1
         });
 
+        // Only increment nonce if transaction was successfully submitted
+        if (rpcResponse.status === 200) {
+            nonceTracker[sender.address] = BigInt(currentNonce) + BigInt(1);
+            console.log('Nonce incremented to:', nonceTracker[sender.address]);
+        } else {
+            throw new Error('Transaction submission failed');
+        }
 
-        console.log('rpcResponse-->', rpcResponse.status);
-
-        // Log the transaction
-        const transactionHash = rpcResponse.data.result;
         await logTransaction({
             senderAddress: sender.address,
-            transactionHash,
-            status: rpcResponse.status, // You might want to update this later when the transaction is mined
-            nonce: nonce.toString()
+            transactionHash: rpcResponse.data.result,
+            status: rpcResponse.status,
+            nonce: currentNonce.toString()
         });
 
-        // Return the RPC response to the client
         res.json(rpcResponse.data);
 
     } catch (err) {
@@ -82,7 +81,5 @@ app.post('/sign', async (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log('🚀 Signing server configuration:');
-    console.log(config);
     console.log(`Server running at http://localhost:${port}`);
 });
