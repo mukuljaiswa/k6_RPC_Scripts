@@ -1,36 +1,40 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { SharedArray } from 'k6/data';
-import { AddressManager } from './addressManager.js';
 
-// Configuration
+// Config
 const config = {
     signServer: __ENV.SIGN_SERVER || 'http://localhost:3000/sign',
     senderPath: __ENV.SENDER_WALLETS_PATH || './wallets/output_part_1.json',
     receiverPath: __ENV.RECEIVER_WALLETS_PATH || './wallets/output_part_2.json'
 };
 
-// Load sender wallets
-const senders = new SharedArray('senders', function () {
-    const data = JSON.parse(open(config.senderPath));
-    return data.map(wallet => ({
-        ...wallet,
-        amountEther: '0.0001' // Set fixed amount to send
-    }));
+// Shared sender and receiver data
+const senders = new SharedArray('senders', () => {
+    return JSON.parse(open(config.senderPath));
 });
 
-// Load receiver addresses
-const receivers = new SharedArray('receivers', function () {
+const receivers = new SharedArray('receivers', () => {
     const data = JSON.parse(open(config.receiverPath));
     return data.map(w => typeof w === 'string' ? w : w.address);
 });
 
-// Initialize address manager
-const addressManager = new AddressManager(senders, receivers);
-
 export default function () {
-    // Get the next address pair using the current VU ID
-    const { sender, receiver } = addressManager.getNextAddressPair(__VU);
+    const vuID = __VU;
+    const iter = __ITER;
+
+    // Total VUs assumed (static or manually controlled)
+    const TOTAL_VUS = 5;
+
+    // Deterministic sender per VU, rotated by iteration
+    const senderIndex = (iter * TOTAL_VUS + (vuID - 1)) % senders.length;
+    const receiverIndex = (iter + vuID) % receivers.length;
+
+    const sender = {
+        ...senders[senderIndex],
+        amountEther: '0.0001'
+    };
+    const receiver = receivers[receiverIndex];
 
     const txData = {
         receiver,
@@ -41,31 +45,27 @@ export default function () {
         }
     };
 
-    const signRes = http.post(config.signServer, JSON.stringify(txData), {
+    const res = http.post(config.signServer, JSON.stringify(txData), {
         headers: { 'Content-Type': 'application/json' }
     });
 
-    console.log(`VU: ${__VU}, Iteration: ${__ITER}, Sender: ${sender.address}, Receiver: ${receiver}, Status: ${signRes.status}, Transaction Hash: ${JSON.parse(signRes.body).result}`);
+    const txHash = JSON.parse(res.body).result;
+    console.log(`VU: ${vuID}, Iteration: ${iter}, Sender: ${sender.address}, Receiver: ${receiver}, Status: ${res.status}, Transaction Hash: ${txHash}`);
 
-    check(signRes, {
-        'tx accepted': (r) => r.status === 200,
-        'no rpc error': (r) => !r.json('error')
+    check(res, {
+        'status is 200': (r) => r.status === 200,
+        'has result': (r) => !!r.json('result')
     });
 
     sleep(1);
 }
 
-// Load test configuration
 export let options = {
     scenarios: {
-        ramping_users: {
-            executor: 'ramping-vus',
-            startVUs: 0,
-            stages: [
-                { duration: '5s', target: 5 },   // Ramp-up: 1 user per second
-                { duration: '10s', target: 5 },  // Hold: keep 5 users active
-                { duration: '3s', target: 0 },   // Ramp-down: all users exit in 3 seconds
-            ],
+        constant_vus: {
+            executor: 'constant-vus',
+            vus: 5,
+            duration: '30s',
         },
     },
 };

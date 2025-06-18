@@ -2,60 +2,52 @@ export class AddressManager {
     constructor(senders, receivers) {
         this.senders = senders;
         this.receivers = receivers;
-        this.vuStates = new Map(); // Track state per VU
-        this.lock = false; // Still need locking for receiver index
+
+        this.senderIndex = 0;
+        this.receiverIndex = 0;
+        this.usedSendersInCycle = new Set();
+
+        this.lock = false;
     }
 
-    getNextAddressPair(vuId) {
-        // Simple locking mechanism for thread safety
+    acquireLock() {
         while (this.lock) {
-            const waitUntil = Date.now() + 10;
+            const waitUntil = Date.now() + 1;
             while (Date.now() < waitUntil) {}
         }
-
         this.lock = true;
-        try {
-            // Initialize VU state if not exists
-            if (!this.vuStates.has(vuId)) {
-                this.vuStates.set(vuId, {
-                    sender: this.senders[(vuId - 1) % this.senders.length],
-                    usedReceivers: new Set(),
-                    lastReceiverIndex: 0
-                });
-            }
-
-            const vuState = this.vuStates.get(vuId);
-            const sender = vuState.sender;
-            
-            // Find next unused receiver for this VU
-            let receiver;
-            let attempts = 0;
-            const maxAttempts = this.receivers.length;
-            
-            do {
-                receiver = this.receivers[vuState.lastReceiverIndex % this.receivers.length];
-                vuState.lastReceiverIndex++;
-                attempts++;
-                
-                if (attempts >= maxAttempts) {
-                    throw new Error(`No unused receivers left for VU ${vuId}`);
-                }
-            } while (vuState.usedReceivers.has(receiver));
-            
-            vuState.usedReceivers.add(receiver);
-            
-            return { sender, receiver };
-        } finally {
-            this.lock = false;
-        }
     }
 
-    resetCounters() {
-        this.lock = true;
+    releaseLock() {
+        this.lock = false;
+    }
+
+    getNextAddressPair() {
+        this.acquireLock();
         try {
-            this.vuStates.clear();
+            // Reset if all senders have been used
+            if (this.usedSendersInCycle.size >= this.senders.length) {
+                this.usedSendersInCycle.clear();
+                this.senderIndex = 0;
+            }
+
+            let sender;
+            while (true) {
+                const candidate = this.senders[this.senderIndex % this.senders.length];
+                this.senderIndex++;
+                if (!this.usedSendersInCycle.has(candidate.address)) {
+                    sender = candidate;
+                    this.usedSendersInCycle.add(candidate.address);
+                    break;
+                }
+            }
+
+            const receiver = this.receivers[this.receiverIndex % this.receivers.length];
+            this.receiverIndex++;
+
+            return { sender, receiver };
         } finally {
-            this.lock = false;
+            this.releaseLock();
         }
     }
 }
