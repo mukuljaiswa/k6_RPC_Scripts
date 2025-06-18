@@ -1,12 +1,13 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { SharedArray } from 'k6/data';
+import { AddressManager } from './addressManager.js';
 
 // Configuration
 const config = {
     signServer: __ENV.SIGN_SERVER || 'http://localhost:3000/sign',
-    senderPath: __ENV.SENDER_WALLETS_PATH || './wallets/test3.json',
-    receiverPath: __ENV.RECEIVER_WALLETS_PATH || './wallets/test2.json'
+    senderPath: __ENV.SENDER_WALLETS_PATH || './wallets/output_part_1.json',
+    receiverPath: __ENV.RECEIVER_WALLETS_PATH || './wallets/output_part_2.json'
 };
 
 // Load sender wallets
@@ -24,17 +25,12 @@ const receivers = new SharedArray('receivers', function () {
     return data.map(w => typeof w === 'string' ? w : w.address);
 });
 
-// Validate address count
-if (senders.length < 10 || receivers.length < 10) {
-    throw new Error(`Need at least 10 senders and 10 receivers. Got ${senders.length} senders and ${receivers.length} receivers.`);
-}
+// Initialize address manager
+const addressManager = new AddressManager(senders, receivers);
 
 export default function () {
-    const senderIndex = (__VU + __ITER) % senders.length;
-    const receiverIndex = (__VU + __ITER) % receivers.length;
-
-    const sender = senders[senderIndex];
-    const receiver = receivers[receiverIndex];
+    // Get the next address pair using the current VU ID
+    const { sender, receiver } = addressManager.getNextAddressPair(__VU);
 
     const txData = {
         receiver,
@@ -49,10 +45,7 @@ export default function () {
         headers: { 'Content-Type': 'application/json' }
     });
 
-   
-    console.log(`VU: ${__VU}, Iteration: ${__ITER}, Sender: ${sender.address}, Receiver: ${receiver}, Status: ${signRes.status},Transaction Hash: ${JSON.parse(signRes.body).result}`  );
-
-
+    console.log(`VU: ${__VU}, Iteration: ${__ITER}, Sender: ${sender.address}, Receiver: ${receiver}, Status: ${signRes.status}, Transaction Hash: ${JSON.parse(signRes.body).result}`);
 
     check(signRes, {
         'tx accepted': (r) => r.status === 200,
@@ -69,9 +62,9 @@ export let options = {
             executor: 'ramping-vus',
             startVUs: 0,
             stages: [
-                { duration: '5s', target: 5 },
-                { duration: '20s', target: 5 },
-                { duration: '10s', target: 0 },
+                { duration: '5s', target: 5 },   // Ramp-up: 1 user per second
+                { duration: '10s', target: 5 },  // Hold: keep 5 users active
+                { duration: '3s', target: 0 },   // Ramp-down: all users exit in 3 seconds
             ],
         },
     },
