@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const { Web3 } = require('web3');
 const { HttpProvider } = require('web3-providers-http');
 const axios = require('axios');
+const { logTransaction } = require('./transaction-logger');
 
 const app = express();
 const port = 3000;
@@ -25,8 +26,6 @@ app.post('/sign', async (req, res) => {
     try {
         const { receiver, amountEther = config.DEFAULT_AMOUNT_ETHER, sender } = req.body;
 
-        console.log("request body----->", req.body);
-
         if (!sender?.address || !sender?.privateKey) {
             throw new Error('Invalid sender wallet provided');
         }
@@ -34,14 +33,11 @@ app.post('/sign', async (req, res) => {
             throw new Error('Receiver address required');
         }
 
-        console.log("sender----->", req.body.sender.address);
-
         const nonce = nonceTracker[sender.address] = 
-            (nonceTracker[sender.address] ?? await web3.eth.getTransactionCount(sender.address, 'pending')) ;
-            nonceTracker[sender.address] = BigInt(nonceTracker[sender.address]) + BigInt(1);
+            (nonceTracker[sender.address] ?? await web3.eth.getTransactionCount(sender.address, 'pending'));
+        nonceTracker[sender.address] = BigInt(nonceTracker[sender.address]) + BigInt(1);
 
-
-        console.log("nonce----->", nonce);
+        console.log("nonce----->", nonce.toString());
 
         const tx = {
             to: receiver,
@@ -52,7 +48,6 @@ app.post('/sign', async (req, res) => {
         };
 
         const signedTx = await web3.eth.accounts.signTransaction(tx, sender.privateKey);
-        //console.log("signedTx----->", signedTx);
 
         // Send the raw transaction directly to the RPC endpoint
         const rpcResponse = await axios.post(config.RPC_URL, {
@@ -62,10 +57,21 @@ app.post('/sign', async (req, res) => {
             id: 1
         });
 
-       // console.log("rpcResponse----->", rpcResponse.data);
+
+        console.log('rpcResponse-->', rpcResponse.status);
+
+        // Log the transaction
+        const transactionHash = rpcResponse.data.result;
+        await logTransaction({
+            senderAddress: sender.address,
+            transactionHash,
+            status: rpcResponse.status, // You might want to update this later when the transaction is mined
+            nonce: nonce.toString()
+        });
 
         // Return the RPC response to the client
         res.json(rpcResponse.data);
+
     } catch (err) {
         console.error("Error:", err);
         res.status(500).json({ 
