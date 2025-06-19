@@ -37,8 +37,6 @@ app.post('/sign', async (req, res) => {
 
         // Get current nonce (either from tracker or blockchain)
         const currentNonce = nonceTracker[sender.address] ?? await web3.eth.getTransactionCount(sender.address, 'pending');
-
-        console.log('Nonce tracker:', nonceTracker);
         
         const tx = {
             to: receiver,

@@ -26,7 +26,7 @@ const receivers = new SharedArray('receivers', () => {
 export default function () {
     const vuID = __VU;
     const iter = __ITER;
-    const TOTAL_VUS = 100;
+    const TOTAL_VUS = 1500;
 
     const senderIndex = (iter * TOTAL_VUS + (vuID - 1)) % senders.length;
     const receiverIndex = (iter + vuID) % receivers.length;
@@ -67,12 +67,25 @@ export default function () {
 
 export let options = {
     scenarios: {
-        constant_vus: {
-            executor: 'constant-vus',
-            vus: 100,
-            duration: '30s',
+        ramp_up_and_down: {
+            executor: 'ramping-vus',
+            startVUs: 0,
+            stages: [
+                // Ramp up to 120 VUs in 12 seconds (10 VUs per second)
+                { duration: '30s', target: 1500 },
+                // Stay at 120 VUs for 2 minutes
+                { duration: '6m', target: 1500 },
+                // Ramp down to 0 VUs in 15 seconds
+                { duration: '30s', target: 0 }
+            ],
+            gracefulRampDown: '15s',
         },
     },
+    // You might want to adjust these thresholds based on your requirements
+    // thresholds: {
+    //     http_req_duration: ['p(95)<500'], // 95% of requests should complete within 500ms
+    //     'custom_http_reqs': ['count>=1200'], // Expect at least 1200 requests (adjust as needed)
+    // },
 };
 
 // HTML + stdout summary
