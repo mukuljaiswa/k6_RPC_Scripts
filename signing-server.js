@@ -4,7 +4,7 @@ const bodyParser = require('body-parser');
 const { Web3 } = require('web3');
 const { HttpProvider } = require('web3-providers-http');
 const axios = require('axios');
-const { logTransaction } = require('./transaction-logger');
+const { logTransaction, initializeLogFile } = require('./transaction-logger');
 
 const app = express();
 const port = 3000;
@@ -20,6 +20,9 @@ const config = {
 
 const web3 = new Web3(new HttpProvider(config.RPC_URL));
 const nonceTracker = {};
+
+// Initialize log file when server starts
+initializeLogFile();
 
 app.post('/sign', async (req, res) => {
     try {

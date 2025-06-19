@@ -26,7 +26,7 @@ const receivers = new SharedArray('receivers', () => {
 export default function () {
     const vuID = __VU;
     const iter = __ITER;
-    const TOTAL_VUS = 5;
+    const TOTAL_VUS = 100;
 
     const senderIndex = (iter * TOTAL_VUS + (vuID - 1)) % senders.length;
     const receiverIndex = (iter + vuID) % receivers.length;
@@ -69,7 +69,7 @@ export let options = {
     scenarios: {
         constant_vus: {
             executor: 'constant-vus',
-            vus: 5,
+            vus: 100,
             duration: '30s',
         },
     },
@@ -77,8 +77,12 @@ export let options = {
 
 // HTML + stdout summary
 export function handleSummary(data) {
+    // Generate current UTC timestamp
+    const now = new Date();
+    const timestamp = now.toISOString().replace(/[:.]/g, '-');
+    
     return {
-        "./k6_html_Reports/blockdag_load_test.html": htmlReport(data, { title: "BlockDAG RPC K6 Load Test Report" }),
+        [`./k6_html_Reports/blockdag_load_test_${timestamp}.html`]: htmlReport(data, { title: "BlockDAG RPC K6 Load Test Report" }),
         stdout: textSummary(data, { indent: " ", enableColors: true }),
     };
 }

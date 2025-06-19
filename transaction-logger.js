@@ -2,27 +2,33 @@ const e = require('express');
 const fs = require('fs');
 const path = require('path');
 
-const LOG_FILE = 'transaction_history.csv';
-const CSV_HEADER = 'Sender Address,Transaction Hash,Status,Nonce\n';
+let LOG_FILE = ''; // Will be initialized when server starts
 
-// Ensure the log file exists with headers
-function ensureLogFile() {
-    if (!fs.existsSync(LOG_FILE)) {
-        fs.writeFileSync(LOG_FILE, CSV_HEADER);
+// Initialize the log file with current UTC time
+function initializeLogFile() {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const dir = './transaction_history';
+    
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
     }
+    
+    LOG_FILE = `${dir}/transaction_history_${timestamp}.csv`;
+    fs.writeFileSync(LOG_FILE, CSV_HEADER);
+    console.log(`Transaction log file created: ${LOG_FILE}`);
 }
+
+const CSV_HEADER = 'Sender Address,Transaction Hash,Status,Nonce\n';
 
 // Log a transaction to the CSV file
 async function logTransaction({ senderAddress, transactionHash, status, nonce }) {
     try {
-        ensureLogFile();
-        
-        if (status==200){
-            status = 'success';
-        }else{
-            status = 'failed';
-
+        // If LOG_FILE hasn't been initialized yet, initialize it
+        if (!LOG_FILE) {
+            initializeLogFile();
         }
+        
+        status = status == 200 ? 'success' : 'failed';
 
         const csvRow = `"${senderAddress}","${transactionHash}","${status}","${nonce}"\n`;
         fs.appendFileSync(LOG_FILE, csvRow);
@@ -34,5 +40,6 @@ async function logTransaction({ senderAddress, transactionHash, status, nonce })
 }
 
 module.exports = {
-    logTransaction
+    logTransaction,
+    initializeLogFile // Export this so we can call it when server starts
 };
