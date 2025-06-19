@@ -12,7 +12,7 @@ const port = 3000;
 app.use(bodyParser.json());
 
 const config = {
-    RPC_URL: process.env.RPC_URL || 'http://localhost:8545',
+    RPC_URL: process.env.RPC_URL || 'http://localhost:18545/',
     GAS: parseInt(process.env.GAS_LIMIT) || 21000,
     GAS_PRICE: process.env.GAS_PRICE || '50',
     DEFAULT_AMOUNT_ETHER: process.env.DEFAULT_AMOUNT_ETHER || '0.0001'
@@ -57,7 +57,6 @@ app.post('/sign', async (req, res) => {
         // Only increment nonce if transaction was successfully submitted
         if (rpcResponse.status === 200) {
             nonceTracker[sender.address] = BigInt(currentNonce) + BigInt(1);
-            console.log('Nonce incremented to:', nonceTracker[sender.address]);
         } else {
             throw new Error('Transaction submission failed');
         }

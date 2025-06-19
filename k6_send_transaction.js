@@ -1,6 +1,12 @@
 import http from 'k6/http';
-import { check, sleep } from 'k6';
+import { check, sleep, group } from 'k6';
+import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
+import { textSummary } from "https://jslib.k6.io/k6-summary/0.0.1/index.js";
 import { SharedArray } from 'k6/data';
+import { Counter } from 'k6/metrics';
+
+// Custom counter
+export const requestCounter = new Counter('custom_http_reqs');
 
 // Config
 const config = {
@@ -9,10 +15,8 @@ const config = {
     receiverPath: __ENV.RECEIVER_WALLETS_PATH || './wallets/output_part_2.json'
 };
 
-// Shared sender and receiver data
-const senders = new SharedArray('senders', () => {
-    return JSON.parse(open(config.senderPath));
-});
+// Load senders and receivers
+const senders = new SharedArray('senders', () => JSON.parse(open(config.senderPath)));
 
 const receivers = new SharedArray('receivers', () => {
     const data = JSON.parse(open(config.receiverPath));
@@ -22,11 +26,8 @@ const receivers = new SharedArray('receivers', () => {
 export default function () {
     const vuID = __VU;
     const iter = __ITER;
-
-    // Total VUs assumed (static or manually controlled)
     const TOTAL_VUS = 5;
 
-    // Deterministic sender per VU, rotated by iteration
     const senderIndex = (iter * TOTAL_VUS + (vuID - 1)) % senders.length;
     const receiverIndex = (iter + vuID) % receivers.length;
 
@@ -45,16 +46,20 @@ export default function () {
         }
     };
 
-    const res = http.post(config.signServer, JSON.stringify(txData), {
-        headers: { 'Content-Type': 'application/json' }
-    });
+    group("BlockDAG RPC Call", function () {
+        const res = http.post(config.signServer, JSON.stringify(txData), {
+            headers: { 'Content-Type': 'application/json' },
+            tags: { name: '' }
+        });
 
-    const txHash = JSON.parse(res.body).result;
-    console.log(`VU: ${vuID}, Iteration: ${iter}, Sender: ${sender.address}, Receiver: ${receiver}, Status: ${res.status}, Transaction Hash: ${txHash}`);
+        requestCounter.add(1);
 
-    check(res, {
-        'status is 200': (r) => r.status === 200,
-        'has result': (r) => !!r.json('result')
+        const txHash = JSON.parse(res.body).result;
+        console.log(`VU: ${vuID}, Iteration: ${iter}, Sender: ${sender.address}, Receiver: ${receiver}, Status: ${res.status}, Transaction Hash: ${txHash}`);
+
+        check(res, {
+            'status is 200': (r) => r.status === 200,
+        });
     });
 
     sleep(1);
@@ -69,3 +74,11 @@ export let options = {
         },
     },
 };
+
+// HTML + stdout summary
+export function handleSummary(data) {
+    return {
+        "./k6_html_Reports/blockdag_load_test.html": htmlReport(data, { title: "BlockDAG RPC K6 Load Test Report" }),
+        stdout: textSummary(data, { indent: " ", enableColors: true }),
+    };
+}
