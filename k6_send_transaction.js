@@ -10,7 +10,7 @@ export const requestCounter = new Counter('custom_http_reqs');
 
 // Config
 const config = {
-    signServer: __ENV.SIGN_SERVER || 'http://localhost:3000/sign',
+    signServer: __ENV.SIGN_SERVER || 'https://rpc.loadtest.devdomain123.com/',
     senderPath: __ENV.SENDER_WALLETS_PATH || './wallets/output_part_1.json',
     receiverPath: __ENV.RECEIVER_WALLETS_PATH || './wallets/output_part_2.json'
 };
