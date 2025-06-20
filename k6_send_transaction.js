@@ -10,7 +10,7 @@ export const requestCounter = new Counter('custom_http_reqs');
 
 // Config
 const config = {
-    signServer: __ENV.SIGN_SERVER || 'https://rpc.loadtest.devdomain123.com/',
+    signServer: __ENV.SIGN_SERVER || 'http://localhost:3000/sign',
     senderPath: __ENV.SENDER_WALLETS_PATH || './wallets/output_part_1.json',
     receiverPath: __ENV.RECEIVER_WALLETS_PATH || './wallets/output_part_2.json'
 };
@@ -26,7 +26,7 @@ const receivers = new SharedArray('receivers', () => {
 export default function () {
     const vuID = __VU;
     const iter = __ITER;
-    const TOTAL_VUS = 1500;
+    const TOTAL_VUS = 50;
 
     const senderIndex = (iter * TOTAL_VUS + (vuID - 1)) % senders.length;
     const receiverIndex = (iter + vuID) % receivers.length;
@@ -72,9 +72,9 @@ export let options = {
             startVUs: 0,
             stages: [
                 // Ramp up to 120 VUs in 12 seconds (10 VUs per second)
-                { duration: '30s', target: 1500 },
+                { duration: '30s', target: 50 },
                 // Stay at 120 VUs for 2 minutes
-                { duration: '6m', target: 1500 },
+                { duration: '6m', target: 50 },
                 // Ramp down to 0 VUs in 15 seconds
                 { duration: '30s', target: 0 }
             ],

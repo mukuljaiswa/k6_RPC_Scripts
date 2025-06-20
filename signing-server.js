@@ -12,7 +12,7 @@ const port = 3000;
 app.use(bodyParser.json());
 
 const config = {
-    RPC_URL: process.env.RPC_URL || 'http://localhost:18545/',
+    RPC_URL: process.env.RPC_URL || 'https://rpc.loadtest.devdomain123.com/',
     GAS: parseInt(process.env.GAS_LIMIT) || 21000,
     GAS_PRICE: process.env.GAS_PRICE || '50',
     DEFAULT_AMOUNT_ETHER: process.env.DEFAULT_AMOUNT_ETHER || '0.0001'
