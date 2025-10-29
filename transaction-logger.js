@@ -1,45 +1,21 @@
-const e = require('express');
-const fs = require('fs');
-const path = require('path');
-
-let LOG_FILE = ''; // Will be initialized when server starts
-
-// Initialize the log file with current UTC time
-function initializeLogFile() {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const dir = './transaction_history';
-    
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-    }
-    
-    LOG_FILE = `${dir}/transaction_history_${timestamp}.csv`;
-    fs.writeFileSync(LOG_FILE, CSV_HEADER);
-    console.log(`Transaction log file created: ${LOG_FILE}`);
+export function initializeLogger(logPath = './transaction_history') {
+    console.log(`[LOGGER] Initialized - transaction logging enabled (console output only)`);
 }
 
-const CSV_HEADER = 'Sender Address,Transaction Hash,Status,Nonce\n';
-
-// Log a transaction to the CSV file
-async function logTransaction({ senderAddress, transactionHash, status, nonce }) {
+export function logTransaction(data) {
     try {
-        // If LOG_FILE hasn't been initialized yet, initialize it
-        if (!LOG_FILE) {
-            initializeLogFile();
-        }
-        
-        status = status == 200 ? 'success' : 'failed';
+        const timestamp = new Date().toISOString();
+        const logEntry = [
+            timestamp,
+            data.senderAddress,
+            data.transactionHash || 'none',
+            data.status,
+            data.nonce || 'none',
+            data.error || ''
+        ].join(',');
 
-        const csvRow = `"${senderAddress}","${transactionHash}","${status}","${nonce}"\n`;
-        fs.appendFileSync(LOG_FILE, csvRow);
-        
-    } catch (err) {
-        console.error('Error logging transaction:', err);
-        throw err;
+        console.log(`[TX LOG] ${logEntry}`);
+    } catch (error) {
+        console.error('[LOGGER] Failed to log transaction:', error);
     }
 }
-
-module.exports = {
-    logTransaction,
-    initializeLogFile // Export this so we can call it when server starts
-};
