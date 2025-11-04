@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Prometheus exposes its own metrics and UI on port 9090
+# It will receive metrics (remote_write) from k6 on the same port
+# So no need to send to 9091
+scrape_configs:
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape k6 metrics exporter (if running)
+  - job_name: 'k6'
+    static_configs:
+      - targets: ['localhost:6565']
+    scrape_interval: 5s
+

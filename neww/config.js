@@ -13,10 +13,9 @@ export const config = {
   senderPath: __ENV.SENDER_WALLETS_PATH,
   receiverPath: __ENV.RECEIVER_WALLETS_PATH,
   etherValue: __ENV.DEFAULT_AMOUNT_ETHER
-
 };
 
-// Options
+// Options with Prometheus compatible metrics
 export const options = {
   scenarios: {
     ramp_up_and_down: {
@@ -37,4 +36,13 @@ export const options = {
     'successful_txs': ['count>100'],
     'rpc_errors': ['count<50'],
   },
+  
+  // Enable Prometheus format output
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(95)', 'p(99)'],
+  
+  // Tags for better Prometheus labeling
+  tags: {
+    test_type: 'blockdag_transaction',
+    component: 'rpc_load_test'
+  }
 };

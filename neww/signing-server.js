@@ -4,7 +4,7 @@ const bodyParser = require('body-parser');
 const { Web3 } = require('web3');
 const { HttpProvider } = require('web3-providers-http');
 const app = express();
-const port = 3000;
+const port = 3001;
 
 app.use(bodyParser.json());
 
