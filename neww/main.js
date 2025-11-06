@@ -3,7 +3,7 @@ import { SharedArray } from 'k6/data';
 import { Trend, Rate, Counter } from 'k6/metrics';
 
 // Import from other files
-import { config, successCounter, errorCounter, rpcErrorCounter } from './config.js';
+import { config, successCounter, errorCounter, rpcErrorCounter, prometheusMetrics } from './config.js';
 import { getSignedTransaction, sendRawTransaction, logTransaction, handleSummary } from './utils.js';
 
 // Additional metrics for Prometheus
@@ -43,18 +43,22 @@ export default function () {
     }
   };
 
+  // ==================== PROMETHEUS: Track transaction start ====================
+  const transactionStart = Date.now();
+  
   group("BlockDAG Transaction Flow", function () {
     // Step 1: Call signing server
-    const signStart = Date.now();
-    const signRes = getSignedTransaction(txData);
-    const signDuration = Date.now() - signStart;
-    signLatency.add(signDuration);
+    const signResult = getSignedTransaction(txData);
     
-    if (!signRes) {
+    if (!signResult || !signResult.response) {
       errorCounter.add(1);
       successRate.add(0);
+      prometheusMetrics.transactionsFailed.add(1);
       return;
     }
+
+    const signRes = signResult.response;
+    const signDuration = signResult.duration;
 
     let signData;
     try {
@@ -63,6 +67,8 @@ export default function () {
       console.error(`VU:${vuID} Iter:${iter} - Failed to parse sign response: ${signRes.body}`);
       errorCounter.add(1);
       successRate.add(0);
+      prometheusMetrics.transactionsFailed.add(1);
+      prometheusMetrics.errorRate.add(1);
       return;
     }
 
@@ -72,14 +78,19 @@ export default function () {
       console.error(`VU:${vuID} Iter:${iter} - No signed transaction received`);
       errorCounter.add(1);
       successRate.add(0);
+      prometheusMetrics.transactionsFailed.add(1);
+      prometheusMetrics.errorRate.add(1);
       return;
     }
 
     // Step 2: Send raw transaction to RPC
-    const rpcStart = Date.now();
-    const rpcRes = sendRawTransaction(signedTx);
-    const rpcDuration = Date.now() - rpcStart;
-    rpcLatency.add(rpcDuration);
+    const rpcResult = sendRawTransaction(signedTx);
+    const rpcRes = rpcResult.response;
+    const rpcDuration = rpcResult.duration;
+    
+    // ==================== PROMETHEUS: Track total transaction latency ====================
+    const totalDuration = Date.now() - transactionStart;
+    prometheusMetrics.totalLatency.add(totalDuration);
     
     let rpcBody;
     try {
@@ -88,6 +99,8 @@ export default function () {
       console.error(`VU:${vuID} Iter:${iter} - Failed to parse RPC response: ${rpcRes.body}`);
       errorCounter.add(1);
       successRate.add(0);
+      prometheusMetrics.transactionsFailed.add(1);
+      prometheusMetrics.errorRate.add(1);
       return;
     }
 
@@ -102,6 +115,9 @@ export default function () {
     if (success) {
       successCounter.add(1);
       successRate.add(1);
+      prometheusMetrics.transactionsSuccess.add(1);
+      prometheusMetrics.errorRate.add(0);
+      
       const txHash = rpcBody.result;
       
       logTransaction({
@@ -110,7 +126,8 @@ export default function () {
         status: rpcRes.status,
         nonce: nonce,
         signLatency: signDuration,
-        rpcLatency: rpcDuration
+        rpcLatency: rpcDuration,
+        totalLatency: totalDuration
       });
       
       console.log(`VU:${vuID} Iter:${iter} - Success: ${txHash}, Expected: ${expectedHash}`);
@@ -118,6 +135,9 @@ export default function () {
       errorCounter.add(1);
       rpcErrorCounter.add(1);
       successRate.add(0);
+      prometheusMetrics.transactionsFailed.add(1);
+      prometheusMetrics.rpcErrors.add(1);
+      prometheusMetrics.errorRate.add(1);
       
       console.error(`VU:${vuID} Iter:${iter} - RPC failed. Status: ${rpcRes.status}, Body: ${rpcRes.body}`);
       
