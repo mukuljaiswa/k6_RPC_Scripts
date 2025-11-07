@@ -7,7 +7,6 @@ const textSummary = require("https://jslib.k6.io/k6-summary/0.0.1/index.js").tex
 
 // Transaction logger function
 export function logTransaction(data) {
-
   const timestamp = new Date().toISOString();
   const logEntry = `[${timestamp}] Sender: ${data.senderAddress}, Hash: ${data.transactionHash}, Status: ${data.status}, Nonce: ${data.nonce}, SignLatency: ${data.signLatency}ms, RPCLatency: ${data.rpcLatency}ms`;
   console.log(logEntry);
@@ -41,6 +40,7 @@ export function getSignedTransaction(txData) {
     console.error(`Signing failed: ${res.body}`);
     prometheusMetrics.signingErrors.add(1);
     prometheusMetrics.errorRate.add(1);
+    prometheusMetrics.activeUsers.add(-1);
     return null;
   }
   
@@ -100,35 +100,85 @@ export function sendRawTransaction(signedTx) {
   };
 }
 
-// Handle summary function
+// Handle summary function - CORRECTED VERSION
 export function handleSummary(data) {
-  console.log
   const now = new Date();
   const timestamp = now.toISOString().replace(/[:.]/g, '-');
   
   console.log('\n=== PROMETHEUS-FRIENDLY METRICS ===');
-  console.log(`blockchain_transactions_total: ${data.metrics.custom_http_reqs.count}`);
-  console.log(`blockchain_transactions_success_total: ${data.metrics.successful_txs.count}`);
-  console.log(`blockchain_transactions_failed_total: ${data.metrics.failed_txs.count}`);
-  console.log(`blockchain_rpc_errors_total: ${data.metrics.rpc_errors.count}`);
-  console.log(`blockchain_sign_latency_p95: ${data.metrics.sign_latency_ms.values['p(95)']}`);
-  console.log(`blockchain_rpc_latency_p95: ${data.metrics.rpc_latency_ms.values['p(95)']}`);
-  console.log(`blockchain_success_rate: ${data.metrics.success_rate.values.rate}`);
   
-  // Log Prometheus metrics
-  if (data.metrics.blockchain_sign_latency_ms) {
-    console.log(`prometheus_sign_latency_p95: ${data.metrics.blockchain_sign_latency_ms.values['p(95)']}`);
+  // Safe metric access with fallbacks
+  const safeGetMetric = (metricName, property = 'count') => {
+    const metric = data.metrics[metricName];
+    return metric && metric[property] !== undefined ? metric[property] : 'N/A';
+  };
+  
+  const safeGetTrendValue = (metricName, percentile = 'p(95)') => {
+    const metric = data.metrics[metricName];
+    return metric && metric.values && metric.values[percentile] !== undefined 
+      ? metric.values[percentile] 
+      : 'N/A';
+  };
+
+  const safeGetRate = (metricName) => {
+    const metric = data.metrics[metricName];
+    return metric && metric.rate !== undefined ? metric.rate : 'N/A';
+  };
+
+  // CORRECTED METRIC NAMES - Use the actual metric names from k6 output
+  const totalTxs = safeGetMetric('blockchain_transactions_total');
+  const successTxs = safeGetMetric('blockchain_transactions_success_total');
+  const failedTxs = safeGetMetric('blockchain_transactions_failed_total');
+  const rpcErrors = safeGetMetric('blockchain_rpc_errors_total');
+  
+  console.log(`blockchain_transactions_total: ${totalTxs}`);
+  console.log(`blockchain_transactions_success_total: ${successTxs}`);
+  console.log(`blockchain_transactions_failed_total: ${failedTxs}`);
+  console.log(`blockchain_rpc_errors_total: ${rpcErrors}`);
+  console.log(`blockchain_signing_errors_total: ${safeGetMetric('blockchain_signing_errors_total')}`);
+  console.log(`blockchain_sign_latency_p95: ${safeGetTrendValue('blockchain_sign_latency_ms')}ms`);
+  console.log(`blockchain_rpc_latency_p95: ${safeGetTrendValue('blockchain_rpc_latency_ms')}ms`);
+  console.log(`blockchain_total_latency_p95: ${safeGetTrendValue('blockchain_total_latency_ms')}ms`);
+  
+  // Calculate success rate
+  if (totalTxs !== 'N/A' && successTxs !== 'N/A' && totalTxs > 0) {
+    const successRate = ((successTxs / totalTxs) * 100).toFixed(2);
+    console.log(`blockchain_success_rate: ${successRate}%`);
+  } else {
+    console.log(`blockchain_success_rate: N/A`);
   }
-  if (data.metrics.blockchain_rpc_latency_ms) {
-    console.log(`prometheus_rpc_latency_p95: ${data.metrics.blockchain_rpc_latency_ms.values['p(95)']}`);
-  }
-  if (data.metrics.blockchain_error_rate) {
-    console.log(`prometheus_error_rate: ${data.metrics.blockchain_error_rate.values.rate}`);
-  }
+  
+  // Custom metrics
+  console.log(`custom_transactions_total: ${safeGetMetric('custom_http_reqs')}`);
+  console.log(`custom_successful_txs: ${safeGetMetric('successful_txs')}`);
+  console.log(`custom_failed_txs: ${safeGetMetric('failed_txs')}`);
+  console.log(`custom_rpc_errors: ${safeGetMetric('rpc_errors')}`);
+  console.log(`custom_success_rate: ${safeGetRate('success_rate')}`);
+  
+  // Additional Prometheus metrics
+  console.log(`prometheus_error_rate: ${safeGetRate('blockchain_error_rate')}`);
+  console.log(`prometheus_data_throughput_bytes: ${safeGetMetric('blockchain_data_received_bytes')}`);
+  console.log(`prometheus_gas_used: ${safeGetMetric('blockchain_gas_used_total')}`);
+  console.log(`prometheus_transaction_value_wei: ${safeGetMetric('blockchain_transaction_value_wei')}`);
+  console.log(`prometheus_active_users_peak: ${safeGetMetric('blockchain_active_users', 'max')}`);
   
   console.log('============******================\n');
 
-  // Ensure directory exists (you might want to create it manually or add fs check)
+  // Log threshold violations
+  if (data.state && data.state.thresholds) {
+    const violatedThresholds = Object.entries(data.state.thresholds)
+      .filter(([_, threshold]) => threshold.ok === false)
+      .map(([name, _]) => name);
+    
+    if (violatedThresholds.length > 0) {
+      console.log('🚨 THRESHOLD VIOLATIONS:');
+      violatedThresholds.forEach(threshold => {
+        console.log(`   - ${threshold}`);
+      });
+      console.log('');
+    }
+  }
+
   const reportPath = `./k6_html_Reports/blockdag_load_test_${timestamp}.html`;
   
   return {
