@@ -102,6 +102,7 @@ export function sendRawTransaction(signedTx) {
 
 // Handle summary function
 export function handleSummary(data) {
+  console.log
   const now = new Date();
   const timestamp = now.toISOString().replace(/[:.]/g, '-');
   
@@ -125,7 +126,7 @@ export function handleSummary(data) {
     console.log(`prometheus_error_rate: ${data.metrics.blockchain_error_rate.values.rate}`);
   }
   
-  console.log('====================================\n');
+  console.log('============******================\n');
 
   // Ensure directory exists (you might want to create it manually or add fs check)
   const reportPath = `./k6_html_Reports/blockdag_load_test_${timestamp}.html`;

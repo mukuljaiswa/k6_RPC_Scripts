@@ -45,17 +45,12 @@ export const config = {
 
 // Options with Prometheus compatible metrics
 export const options = {
-  scenarios: {
-    ramp_up_and_down: {
-      executor: 'ramping-vus',
-      startVUs: 0,
-      stages: [
-        { duration: '10s', target: 5 },
-        { duration: '20m', target: 10 },
-        { duration: '10s', target: 0 }
-      ]
-    },
-  },
+  stages: [
+    { target: 15, duration: '10s' },  // ramp up
+    { target: 15, duration: '20s' },  // steady load
+    { target: 0, duration: '10s' }    // ramp down (smooth finish)
+  ],
+
   thresholds: {
     // HTTP thresholds
     'http_req_duration{name:sign_tx}': ['p(95)<5000'],
@@ -74,10 +69,8 @@ export const options = {
     'blockchain_total_latency_ms': ['p(95)<15000'],
   },
   
-  // Enable Prometheus format output
   summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(95)', 'p(99)'],
-  
-  // Tags for better Prometheus labeling
+
   tags: {
     test_type: 'blockdag_transaction',
     component: 'rpc_load_test',
